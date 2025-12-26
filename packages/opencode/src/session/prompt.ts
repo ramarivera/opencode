@@ -245,17 +245,17 @@ export namespace SessionPrompt {
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
-      let lastUser: MessageV2.User | undefined
+      // Find the last actual user message, skipping synthetic context injections
+      const lastUser = MessageV2.findLastUserMessage(msgs)
       let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
         if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
-        if (lastUser && lastFinished) break
+        if (lastFinished) break
         const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
         if (task && !lastFinished) {
           tasks.push(...task)
@@ -1002,7 +1002,8 @@ export namespace SessionPrompt {
   }
 
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
-    const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
+    // Find the actual user message, skipping synthetic context injections
+    const userMessage = MessageV2.findLastUserMessageWithParts(input.messages)
     if (!userMessage) return input.messages
     if (input.agent.name === "plan") {
       userMessage.parts.push({

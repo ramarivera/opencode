@@ -419,6 +419,42 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
+  /**
+   * Checks if a user message is an "actual" user message (not purely synthetic).
+   * A message is considered synthetic if ALL its parts have synthetic: true.
+   * Context injection messages (skills, beads, AGENTS.md) are typically purely synthetic.
+   */
+  function isActualUserMessage(msg: WithParts): boolean {
+    if (msg.info.role !== "user") return false
+    if (msg.parts.length === 0) return false
+    return !msg.parts.every((p) => "synthetic" in p && p.synthetic)
+  }
+
+  /**
+   * Finds the last actual user message in a message stream, skipping synthetic messages.
+   * This is used to determine the correct parent for assistant responses.
+   *
+   * Bug context: When context injection plugins (skills, beads, AGENTS.md) inject
+   * synthetic user messages AFTER the actual user message, the assistant response's
+   * parentID should point to the actual user message, not the synthetic injection.
+   */
+  export function findLastUserMessage(msgs: WithParts[]): User | undefined {
+    const msg = findLastUserMessageWithParts(msgs)
+    return msg?.info as User | undefined
+  }
+
+  /**
+   * Finds the last actual user message with its parts, skipping synthetic messages.
+   * Use this when you need to modify the message parts (e.g., insertReminders).
+   */
+  export function findLastUserMessageWithParts(msgs: WithParts[]): WithParts | undefined {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      if (isActualUserMessage(msg)) return msg
+    }
+    return undefined
+  }
+
   export function toModelMessage(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
